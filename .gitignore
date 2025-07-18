@@ -1,0 +1,15 @@
+*.js
+!jest.config.js
+*.d.ts
+node_modules
+*.generated.ts
+.jsii
+tsconfig.json
+!.projenrc.js
+!projen/**/*.js
+!projen/**/*.json
+dist
+.cdk.staging
+cdk.out
+.parcel-cache
+.env
