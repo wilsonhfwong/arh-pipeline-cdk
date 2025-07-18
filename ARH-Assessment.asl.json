@@ -1,0 +1,123 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "ImportResourcesToDraftAppVersion",
+  "States": {
+    "ImportResourcesToDraftAppVersion": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:resiliencehub:importResourcesToDraftAppVersion",
+      "Next": "Wait",
+      "Parameters": {
+        "AppArn.$": "$.AppArn",
+        "SourceArns.$": "States.Array($.StackArn)"
+      }
+    },
+    "Wait": {
+      "Type": "Wait",
+      "Seconds": 5,
+      "Next": "DescribeDraftAppVersionResourcesImportStatus"
+    },
+    "DescribeDraftAppVersionResourcesImportStatus": {
+      "Type": "Task",
+      "Parameters": {
+        "AppArn.$": "$.AppArn"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:resiliencehub:describeDraftAppVersionResourcesImportStatus",
+      "Next": "Choice"
+    },
+    "Choice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "PublishAppVersion",
+          "Variable": "$.Status",
+          "StringMatches": "Success"
+        },
+        {
+          "Next": "SNS Publish",
+          "Variable": "$.Status",
+          "StringMatches": "Failed"
+        }
+      ],
+      "Default": "Wait"
+    },
+    "PublishAppVersion": {
+      "Type": "Task",
+      "Parameters": {
+        "AppArn.$": "$.AppArn"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:resiliencehub:publishAppVersion",
+      "Next": "StartAppAssessment"
+    },
+    "StartAppAssessment": {
+      "Type": "Task",
+      "Parameters": {
+        "AppArn.$": "$.AppArn",
+        "AppVersion": "release",
+        "AssessmentName": "CodePipeline-Assessment"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:resiliencehub:startAppAssessment",
+      "Next": "Wait (1)"
+    },
+    "Wait (1)": {
+      "Type": "Wait",
+      "Seconds": 5,
+      "Next": "DescribeAppAssessment"
+    },
+    "DescribeAppAssessment": {
+      "Type": "Task",
+      "Parameters": {
+        "AssessmentArn.$": "$.Assessment.AssessmentArn"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:resiliencehub:describeAppAssessment",
+      "Next": "Choice (1)"
+    },
+    "Choice (1)": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Wait (1)",
+          "Or": [
+            {
+              "Variable": "$.Assessment.AssessmentStatus",
+              "StringMatches": "InProgress"
+            },
+            {
+              "Variable": "$.Assessment.AssessmentStatus",
+              "StringMatches": "Pending"
+            }
+          ]
+        },
+        {
+          "Next": "Success",
+          "And": [
+            {
+              "Variable": "$.Assessment.AssessmentStatus",
+              "StringMatches": "Success"
+            },
+            {
+              "Variable": "$.Assessment.ComplianceStatus",
+              "StringMatches": "PolicyMet"
+            }
+          ]
+        }
+      ],
+      "Default": "SNS Publish"
+    },
+    "Success": {
+      "Type": "Succeed"
+    },
+    "SNS Publish": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "Message": "{% $states.input %}",
+        "TopicArn": "arn:aws:sns:us-east-2:490077895283:ServerlessCdkDemo-ServerlessStack-api-async-topic"
+      },
+      "Next": "Fail"
+    },
+    "Fail": {
+      "Type": "Fail"
+    }
+  },
+  "QueryLanguage": "JSONPath"
+}
